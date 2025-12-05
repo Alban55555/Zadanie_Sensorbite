@@ -16,6 +16,7 @@
     html, body {
       height: 100%;
       margin: 0;
+      padding: 0;
     }
     #map {
       height: 100%;
@@ -26,20 +27,48 @@
       top: 10px;
       left: 10px;
       z-index: 1000;
-      background: white;
-      padding: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px 12px;
       border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      font-family: sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 13px;
+      max-width: 260px;
+    }
+    .control-panel h1 {
+      font-size: 14px;
+      margin: 0 0 6px;
+    }
+    .control-panel label {
+      display: block;
+      margin-bottom: 3px;
     }
     .control-panel input {
-      width: 110px;
+      width: 120px;
+      margin-left: 4px;
       margin-bottom: 4px;
+      font-size: 12px;
+    }
+    .buttons {
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+    .buttons button {
+      font-size: 12px;
+      padding: 3px 8px;
+      margin-right: 4px;
+    }
+    .hint {
+      font-size: 11px;
+      color: #555;
+      margin-top: 4px;
     }
     .meta {
       margin-top: 6px;
       font-size: 12px;
+    }
+    .meta span {
+      display: block;
     }
   </style>
 </head>
@@ -47,15 +76,40 @@
   <div id="map"></div>
 
   <div class="control-panel">
-    <div><strong>Evacuation route</strong></div>
-    <div>
-      <label>Start lat: <input id="start_lat" type="number" step="0.0001" value="50.0600"></label><br/>
-      <label>Start lon: <input id="start_lon" type="number" step="0.0001" value="19.9400"></label><br/>
-      <label>End lat: <input id="end_lat" type="number" step="0.0001" value="50.0610"></label><br/>
-      <label>End lon: <input id="end_lon" type="number" step="0.0001" value="19.9410"></label><br/>
+    <h1>Evacuation route</h1>
+
+    <label>
+      Start lat:
+      <input id="start_lat" type="number" step="0.0001" value="50.0600">
+    </label>
+    <label>
+      Start lon:
+      <input id="start_lon" type="number" step="0.0001" value="19.9400">
+    </label>
+    <label>
+      End lat:
+      <input id="end_lat" type="number" step="0.0001" value="50.0610">
+    </label>
+    <label>
+      End lon:
+      <input id="end_lon" type="number" step="0.0001" value="19.9410">
+    </label>
+
+    <div class="buttons">
+      <button id="btnRoute">Compute route</button>
+      <button id="btnSwap" type="button">Swap</button>
     </div>
-    <button id="btnRoute">Compute route</button>
-    <div class="meta" id="meta"></div>
+
+    <div class="hint">
+      Left click: set <b>Start</b><br>
+      Right click: set <b>End</b>
+    </div>
+
+    <div class="meta" id="meta">
+      <span>Length: –</span>
+      <span>Edges: –</span>
+      <span>Flooded edges: –</span>
+    </div>
   </div>
 
   <!-- Leaflet JS -->
@@ -66,7 +120,7 @@
   </script>
 
   <script>
-    // init map (center near your sample data)
+    // Initial map centered near Kraków
     const map = L.map('map').setView([50.0605, 19.9405], 15);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -75,48 +129,144 @@
     }).addTo(map);
 
     let routeLayer = null;
+    let startMarker = null;
+    let endMarker = null;
+
+    const startLatInput = document.getElementById('start_lat');
+    const startLonInput = document.getElementById('start_lon');
+    const endLatInput   = document.getElementById('end_lat');
+    const endLonInput   = document.getElementById('end_lon');
+    const metaDiv       = document.getElementById('meta');
+
+    function updateMeta(meta) {
+      if (!meta) {
+        metaDiv.innerHTML = '<span>Length: –</span><span>Edges: –</span><span>Flooded edges: –</span>';
+        return;
+      }
+      metaDiv.innerHTML =
+        `<span>Length: ${meta.length_m.toFixed(3)} (units of CRS)</span>` +
+        `<span>Edges: ${meta.num_edges}</span>` +
+        `<span>Flooded edges: ${meta.avoided_edges}</span>`;
+    }
+
+    function setStart(lat, lon) {
+      startLatInput.value = lat.toFixed(6);
+      startLonInput.value = lon.toFixed(6);
+
+      if (startMarker) {
+        startMarker.setLatLng([lat, lon]);
+      } else {
+        startMarker = L.marker([lat, lon], { draggable: true }).addTo(map);
+        startMarker.bindTooltip("Start", {permanent: true, offset: [0, -15]});
+        startMarker.on('dragend', () => {
+          const p = startMarker.getLatLng();
+          startLatInput.value = p.lat.toFixed(6);
+          startLonInput.value = p.lng.toFixed(6);
+        });
+      }
+    }
+
+    function setEnd(lat, lon) {
+      endLatInput.value = lat.toFixed(6);
+      endLonInput.value = lon.toFixed(6);
+
+      if (endMarker) {
+        endMarker.setLatLng([lat, lon]);
+      } else {
+        endMarker = L.marker([lat, lon], { draggable: true, color: "red" }).addTo(map);
+        endMarker.bindTooltip("End", {permanent: true, offset: [0, -15]});
+        endMarker.on('dragend', () => {
+          const p = endMarker.getLatLng();
+          endLatInput.value = p.lat.toFixed(6);
+          endLonInput.value = p.lng.toFixed(6);
+        });
+      }
+    }
 
     async function fetchRoute() {
-      const startLat = document.getElementById('start_lat').value;
-      const startLon = document.getElementById('start_lon').value;
-      const endLat = document.getElementById('end_lat').value;
-      const endLon = document.getElementById('end_lon').value;
+      const startLat = parseFloat(startLatInput.value);
+      const startLon = parseFloat(startLonInput.value);
+      const endLat   = parseFloat(endLatInput.value);
+      const endLon   = parseFloat(endLonInput.value);
 
-      const url = `/api/evac/route?start_lat=${startLat}&start_lon=${startLon}&end_lat=${endLat}&end_lon=${endLon}`;
+      if (isNaN(startLat) || isNaN(startLon) || isNaN(endLat) || isNaN(endLon)) {
+        alert("Please enter valid numeric coordinates.");
+        return;
+      }
+
+      const baseUrl = window.location.origin; // e.g. http://127.0.0.1:8000
+      const url = `${baseUrl}/api/evac/route?` +
+                  `start_lat=${startLat}&start_lon=${startLon}` +
+                  `&end_lat=${endLat}&end_lon=${endLon}`;
 
       try {
         const res = await fetch(url);
         const data = await res.json();
 
         if (!res.ok) {
-          alert('Error: ' + JSON.stringify(data));
+          console.error("Error response:", data);
+          alert("Error from server: " + JSON.stringify(data.detail || data));
           return;
         }
 
-        // draw route (route is a FeatureCollection)
+        // Remove previous route
         if (routeLayer) {
           map.removeLayer(routeLayer);
         }
 
+        // Draw route directly from GeoJSON FeatureCollection
         routeLayer = L.geoJSON(data.route, {
-          style: { color: 'red', weight: 4 }
+          style: { color: "red", weight: 4 }
         }).addTo(map);
 
-        // zoom to route
-        map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+        // Zoom to route
+        try {
+          map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+        } catch (e) {
+          console.warn("Could not fit bounds:", e);
+        }
 
-        // update metadata
-        const metaDiv = document.getElementById('meta');
-        metaDiv.innerText = `Length: ${data.meta.length_m.toFixed(3)} (units of CRS), ` +
-                            `edges: ${data.meta.num_edges}, ` +
-                            `flooded edges: ${data.meta.avoided_edges}`;
+        // Update meta info
+        updateMeta(data.meta);
+
       } catch (err) {
-        console.error(err);
-        alert('Request failed: ' + err);
+        console.error("Fetch failed:", err);
+        alert("Request failed: " + err);
       }
     }
 
+    // Button handlers
     document.getElementById('btnRoute').addEventListener('click', fetchRoute);
+    document.getElementById('btnSwap').addEventListener('click', () => {
+      const sLat = startLatInput.value;
+      const sLon = startLonInput.value;
+      startLatInput.value = endLatInput.value;
+      startLonInput.value = endLonInput.value;
+      endLatInput.value = sLat;
+      endLonInput.value = sLon;
+
+      if (startMarker && endMarker) {
+        const sPos = startMarker.getLatLng();
+        const ePos = endMarker.getLatLng();
+        startMarker.setLatLng(ePos);
+        endMarker.setLatLng(sPos);
+      }
+    });
+
+    // Map click handlers: left-click -> start, right-click -> end
+    map.on('click', (e) => {
+      setStart(e.latlng.lat, e.latlng.lng);
+    });
+
+    map.on('contextmenu', (e) => {
+      setEnd(e.latlng.lat, e.latlng.lng);
+    });
+
+    // Initialize markers from default inputs
+    setStart(parseFloat(startLatInput.value), parseFloat(startLonInput.value));
+    setEnd(parseFloat(endLatInput.value), parseFloat(endLonInput.value));
+
+    updateMeta(null);
   </script>
 </body>
 </html>
