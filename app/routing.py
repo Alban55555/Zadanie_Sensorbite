@@ -5,61 +5,90 @@ from typing import Tuple, List
 import networkx as nx
 from shapely.geometry import Point, LineString, mapping
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.routing")
 
 
-def _nearest_node(G: nx.MultiDiGraph, lat: float, lon: float) -> Tuple[float, float]:
-    """Najbliższy węzeł grafu do podanej współrzędnej."""
+def _nearest_node(G: nx.Graph, lat: float, lon: float) -> int:
+    """
+    Find ID of the node in G that is closest to given (lat, lon).
+
+    Nodes in G are integers with attributes:
+        - lon
+        - lat
+    """
     target = Point(lon, lat)
-    nearest = None
+    nearest_id = None
     best_dist = float("inf")
 
-    for node in G.nodes:
-        p = Point(node[0], node[1])
+    for node_id, attrs in G.nodes(data=True):
+        p = Point(attrs["lon"], attrs["lat"])
         d = p.distance(target)
         if d < best_dist:
             best_dist = d
-            nearest = node
+            nearest_id = node_id
 
-    if nearest is None:
+    if nearest_id is None:
         raise ValueError("No nodes found in graph")
 
-    return nearest
+    return nearest_id
 
 
-def compute_safe_route(G: nx.MultiDiGraph, start_lat: float, start_lon: float,
-                       end_lat: float, end_lon: float):
-    """Wyznacza trasę unikając krawędzi z atrybutem flooded=True."""
-    logger.info("Computing route from (%s,%s) to (%s,%s)",
-                start_lat, start_lon, end_lat, end_lon)
+def compute_safe_route(
+    G: nx.Graph,
+    start_lat: float,
+    start_lon: float,
+    end_lat: float,
+    end_lon: float,
+):
+    """
+    Compute an evacuation route that penalizes edges marked as flooded.
+
+    Edges in G are expected to have attributes:
+        - length  (float)
+        - flooded (bool)
+    """
+
+    logger.info(
+        "Computing route from (%s, %s) to (%s, %s)",
+        start_lat,
+        start_lon,
+        end_lat,
+        end_lon,
+    )
 
     source = _nearest_node(G, start_lat, start_lon)
     target = _nearest_node(G, end_lat, end_lon)
 
     def weight(u, v, data):
-        # jeśli nie ma length – przyjmij 1.0
+        # dijkstra will call this for each edge
         length = data.get("length", 1.0)
         if data.get("flooded"):
+            # big penalty for flooded segments
             return length * 1000.0
         return length
 
-    path_nodes = nx.dijkstra_path(G, source, target, weight=weight)
+    # shortest path in terms of our custom weight
+    path_nodes: List[int] = nx.dijkstra_path(G, source, target, weight=weight)
     logger.info("Path found with %d nodes", len(path_nodes))
 
-    # budujemy linię routingu i zbieramy metadane
-    line_coords: List[Tuple[float, float]] = list(path_nodes)
+    # Build list of coordinates for the LineString
+    line_coords: List[Tuple[float, float]] = []
+    for node_id in path_nodes:
+        attrs = G.nodes[node_id]
+        line_coords.append((attrs["lon"], attrs["lat"]))
+
     line = LineString(line_coords)
 
     total_length = 0.0
-    avoided = 0
+    flooded_edges = 0
     edges = list(zip(path_nodes[:-1], path_nodes[1:]))
 
     for u, v in edges:
-        # networkx MultiDiGraph – bierzemy pierwszą krawędź
-        data = list(G.get_edge_data(u, v).values())[0]
-        total_length += data["length"]
+        data = G.get_edge_data(u, v) or {}
+        length = float(data.get("length", 0.0))
+        total_length += length
         if data.get("flooded"):
-            avoided += 1
+            flooded_edges += 1
 
     feature = {
         "type": "Feature",
@@ -70,8 +99,10 @@ def compute_safe_route(G: nx.MultiDiGraph, start_lat: float, start_lon: float,
         },
     }
 
-    return feature, {
+    meta = {
         "length_m": float(total_length),
         "num_edges": len(edges),
-        "avoided_edges": avoided,
+        "avoided_edges": flooded_edges,
     }
+
+    return feature, meta
