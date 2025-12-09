@@ -16,6 +16,7 @@ Projekt implementuje usługę backendową + prosty frontend mapowy, który:
 - pokazuje trasę na mapie (frontend: Leaflet.js).
 
 Jak uruchomić backend
+
 1️⃣ Zainstaluj zależności
 pip install -r requirements.txt
 lub jeśli używasz venv:
@@ -24,7 +25,9 @@ source venv/bin/activate     # Linux/macOS
 venv\Scripts\activate        # Windows
 
 pip install -r requirements.txt
+
 2️⃣ Uruchom serwer FastAPI
+
 uvicorn app.main:app --reload
 Serwer będzie dostępny pod:
 
@@ -33,7 +36,9 @@ Serwer będzie dostępny pod:
 Dokumentacja Swagger:
 
 👉 http://127.0.0.1:8000/docs
+
 🗺️ Jak uruchomić frontend mapowy
+
 W przeglądarce otwórz:
 
 👉 http://127.0.0.1:8000/static/map.html
