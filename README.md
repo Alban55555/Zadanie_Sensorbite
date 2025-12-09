@@ -69,6 +69,7 @@ Testują:
 - zwracane metadane,
 
 - działanie endpointu API.
+
 📝 Logowanie
 
 Projekt używa Python logging, definiowanego w logging_conf.py:
