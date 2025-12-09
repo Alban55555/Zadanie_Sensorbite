@@ -29,6 +29,7 @@ pip install -r requirements.txt
 2️⃣ Uruchom serwer FastAPI
 
 uvicorn app.main:app --reload
+
 Serwer będzie dostępny pod:
 
 👉 http://127.0.0.1:8000
@@ -50,7 +51,9 @@ Frontend pozwala:
 - kliknąć prawym — ustawić punkt końcowy,
 
 - kliknąć Compute route — pobrać i wyświetlić trasę.
+- 
 🔌 Endpoint API
+
 Przykład:
 /api/evac/route?start_lat=50.061&start_lon=19.94&end_lat=50.067&end_lon=19.945
 🧪 Testy jednostkowe
