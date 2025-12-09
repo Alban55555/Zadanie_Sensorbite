@@ -56,6 +56,7 @@ Frontend pozwala:
 
 Przykład:
 /api/evac/route?start_lat=50.061&start_lon=19.94&end_lat=50.067&end_lon=19.945
+
 🧪 Testy jednostkowe
 
 Uruchom:
