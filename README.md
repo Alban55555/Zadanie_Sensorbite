@@ -14,34 +14,11 @@ Projekt implementuje usługę backendową + prosty frontend mapowy, który:
 - zwraca wynik jako GeoJSON + metadane,
 
 - pokazuje trasę na mapie (frontend: Leaflet.js).
-  📁 Zawartość projektu
-  Zadanie_Sensorbite/
-│
-├── app/
-│   ├── main.py               # Główny punkt backendu (FastAPI)
-│   ├── api.py                # Endpoint /api/evac/route
-│   ├── routing.py            # Algorytm unikania zagrożeń (Dijkstra)
-│   ├── geo_loader.py         # Ładowanie grafu i stref zagrożeń
-│   ├── state.py              # Przechowywanie stanu (grafu) po starcie
-│   ├── logging_conf.py       # Konfiguracja logowania
-│   └── models.py             # Modele Pydantic (odpowiedź API)
-│
-├── data/
-│   ├── roads.geojson         # Graf dróg
-│   └── flood_zones.geojson   # Polygony zagrożeń
-│
-├── static/
-│   └── map.html              # Frontend Leaflet.js do wizualizacji trasy
-│
-├── tests/
-│   ├── test_api.py           # Test endpointu
-│   └── test_routing.py       # Test algorytmu
-│
-└── README.md
+
 Jak uruchomić backend
 1️⃣ Zainstaluj zależności
 pip install -r requirements.txt
-lub jeśli użtwasz venw:
+lub jeśli używasz venv:
 python -m venv venv
 source venv/bin/activate     # Linux/macOS
 venv\Scripts\activate        # Windows
